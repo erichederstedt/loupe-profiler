@@ -22,6 +22,11 @@ class TestMain extends buddy.SingleSuite {
 
 	public function new() {
 		describe("Testing", {
+			Profiler.profileBlockStart("ignoredBlock1");
+			Sys.sleep(0.1);
+			Profiler.profileBlockEnd();
+
+			Profiler.startProfiling();
 			Profiler.profileBlockStart("block1");
 			Sys.sleep(0.1);
 
@@ -44,8 +49,14 @@ class TestMain extends buddy.SingleSuite {
 			Profiler.profileBlockEnd();
 			Profiler.profileBlockEnd();
 
+			Profiler.stopProfiling();
+
+			Profiler.profileBlockStart("ignoredBlock2");
+			Sys.sleep(0.1);
+			Profiler.profileBlockEnd();
+
 			object = Profiler.dumpToObject();
-			trace(object);
+			Profiler.printMarks();
 
 			it("should have the displayTimeUnit ms", {
 				object.displayTimeUnit.should.be("ms");

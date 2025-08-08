@@ -49,17 +49,32 @@ class TraceEvent {
 }
 
 class Profiler {
-	static var _markStack:std.Array<Mark> = new std.Array<Mark>();
-	static var _markRecord:std.Array<Mark> = new std.Array<Mark>();
+	static var _markStack:std.Array<Mark> = [];
+	static var _markRecord:std.Array<Mark> = [];
+	static var _isRecording = false;
+
+	public static function startProfiling() {
+		_isRecording = true;
+	}
+
+	public static function stopProfiling() {
+		_isRecording = false;
+	}
 
 	public static function profileBlockStart(name:String) {
+		if (!_isRecording)
+			return;
+
 		_markStack.push(new Mark(name, timestamp(), (_markStack.length != 0) ? _markStack[_markStack.length - 1] : null));
 	}
 
 	public static function profileBlockEnd() {
+		if (!_isRecording)
+			return;
+
 		Assert.isFalse(_markStack.length <= 0, "There is no mark to pop. The number of profileBlockStart and profileBlockEnd do not match.");
 
-		var mark:Mark = _markStack.pop();
+		var mark = _markStack.pop();
 		mark.timestampEnd = timestamp();
 
 		if (mark.parent == null) {
@@ -98,22 +113,18 @@ class Profiler {
 	public static function printMark(mark:Mark, depth:Int = 0) {
 		final indent = StringTools.lpad("", "-", depth);
 		trace(indent + "Mark: " + mark.name + ", Begin: " + mark.timestampBegin + ", End: " + mark.timestampEnd);
-		for (child in mark.children) {
-			printMark(child, depth + 1);
-		}
+		mark.children.each(mark -> printMark(mark, depth + 1));
 	}
 
 	public static function printMarks() {
-		for (mark in _markRecord) {
-			printMark(mark);
-		}
+		_markRecord.each(mark -> printMark(mark));
 	}
 
-	static final pid = 0;
-	static final tid = 0;
-	static final cat = "PERF";
-
 	public static function dumpMark(mark:Mark, traceEvents:Array<TraceEvent>) {
+		final pid = 0;
+		final tid = 0;
+		final cat = "PERF";
+
 		traceEvents.push({
 			name: mark.name,
 			cat: cat,
@@ -123,9 +134,7 @@ class Profiler {
 			ts: Std.int(mark.timestampBegin)
 		});
 
-		for (child in mark.children) {
-			dumpMark(child, traceEvents);
-		}
+		mark.children.each(child -> dumpMark(child, traceEvents));
 
 		traceEvents.push({
 			name: mark.name,
@@ -139,11 +148,7 @@ class Profiler {
 
 	public static function dumpToObject():Dynamic {
 		var traceEvents = new Array<TraceEvent>();
-
-		for (mark in _markRecord) {
-			dumpMark(mark, traceEvents);
-		}
-
+		_markRecord.each(mark -> dumpMark(mark, traceEvents));
 		return {
 			traceEvents: traceEvents,
 			displayTimeUnit: "ms"
@@ -156,7 +161,6 @@ class Profiler {
 
 	public static function dumpToJsonFile(filename:String) {
 		var jsonString = dumpToJson();
-		trace(jsonString);
 		#if js
 		var blob = new Blob([jsonString], {type: "application/json"});
 		var url = URL.createObjectURL(blob);
@@ -180,10 +184,9 @@ class Profiler {
 		if (localClass == null)
 			return fields;
 
-		fields.filter((field:Field) -> field.meta != null && field.meta.find(m -> m.name == ":profile") != null).each((field:Field) -> {
+		fields.filter(field -> field.meta != null && field.meta.find(m -> m.name == ":profile") != null).each(field -> {
 			switch (field.kind) {
 				case FFun(func):
-					trace(field.name);
 					func.expr = macro {
 						Profiler.profileBlockStart($v{localClass.get().name} + ":" + $v{field.name});
 						try {

@@ -2,6 +2,14 @@
 A simple intstrumentation-based profiler.
 
 ## Usage
+### Enable profiling
+```hx
+Profiler.startProfiling(); // Profiling is disabled by default, so you must always do this once before starting to call the profiling functions or they won't be recorded.
+```
+### Disable profiling
+```hx
+Profiler.stopProfiling();
+```
 ### Profile block start/end
 ```hx
 Profiler.profileBlockStart("block1");
