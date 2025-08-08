@@ -1,5 +1,5 @@
 # loupe-profiler
-A simple intstrumentation-based profiler.
+A simple instrumentation-based profiler.
 
 ## Usage
 ### Enable profiling
