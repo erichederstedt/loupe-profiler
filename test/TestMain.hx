@@ -39,7 +39,7 @@ class TestMain extends buddy.SingleSuite {
 
 			Profiler.profileBlockEnd();
 
-			var foo:Foo = new Foo();
+			var foo = new Foo();
 			foo.bar(); // Profiled through macro
 
 			Sys.sleep(0.1);
