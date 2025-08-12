@@ -28,7 +28,7 @@ class Mark {
 	public final timestampBegin:Float;
 	public var timestampEnd:Float;
 
-	public function new(name:String, timestampBegin:Float, parent:Null<Mark> = null) {
+	public function new(name:String, timestampBegin:Float, ?parent:Null<Mark>) {
 		this.name = name;
 		this.parent = parent;
 		this.children = [];
@@ -47,33 +47,43 @@ class Mark {
 **/
 @:structInit
 class TraceEvent {
-	public var name:String;
-	public var cat:String;
-	public var ph:String;
-	public var pid:Int;
-	public var tid:Int;
-	public var ts:Int;
+	public final name:String;
+	public final cat:String;
+	public final ph:String;
+	public final pid:Int;
+	public final tid:Int;
+	public final ts:Int;
 }
 
 /**
-	An instrumentation-based profiler. Go to the README for usage examples
+	An instrumentation-based profiler
 **/
 class Profiler {
-	static var _markStack:Array<Mark> = [];
-	static var _markRecord:Array<Mark> = [];
+	static final _markStack:Array<Mark> = [];
+	static final _markRecord:Array<Mark> = [];
 	static var _isRecording = false;
 
 	/**
 		Starts recording a profile
+
+		@example
+		```haxe
+		Profiler.startProfiling(); // Profiling is disabled by default, so you must always do this once before starting to call the profiling functions or they won't be recorded.
+		```
 	**/
 	public static function startProfiling() {
 		_isRecording = true;
-		_markStack = [];
-		_markRecord = [];
+		_markStack.resize(0);
+		_markRecord.resize(0);
 	}
 
 	/**
 		Stops recording a profile
+
+		@example
+		```haxe
+		Profiler.stopProfiling();
+		```
 	**/
 	public static function stopProfiling() {
 		_isRecording = false;
@@ -81,6 +91,15 @@ class Profiler {
 
 	/**
 		Starts a profile block
+
+		@param name The name of the profiled block
+
+		@example
+		```haxe
+		Profiler.profileBlockStart("block1");
+		// Work you want to profile
+		Profiler.profileBlockEnd();
+		```
 	**/
 	public static function profileBlockStart(name:String) {
 		if (!_isRecording) {
@@ -92,6 +111,13 @@ class Profiler {
 
 	/**
 		Ends a profile block
+
+		@example
+		```haxe
+		Profiler.profileBlockStart("block1");
+		// Work you want to profile
+		Profiler.profileBlockEnd();
+		```
 	**/
 	public static function profileBlockEnd() {
 		if (!_isRecording) {
@@ -100,22 +126,29 @@ class Profiler {
 
 		Assert.isFalse(_markStack.length <= 0, 'There is no mark to pop. The number of profileBlockStart and profileBlockEnd do not match.');
 
-		var mark = _markStack.pop();
+		final mark = _markStack.pop();
 		mark.timestampEnd = timestamp();
 
-		if (mark.parent == null) {
-			_markRecord.push(mark);
-		}
+		_markRecord.pushIf(mark.parent == null, mark);
 	}
 
 	/**
 		Profiles a code block
 
 		@param mark The mark which will be dumped
-		@param outTraceEvents The output array
+		@param expr The code block that will be profiled
+
+		@return The modified AST
+
+		@example
+		```haxe
+		Profiler.profileBlock("block3", {
+			// Work you want to profile
+		});
+		```
 	**/
 	macro public static function profileBlock(name:String, expr:Expr):Expr {
-		var body = switch expr.expr {
+		final body = switch expr.expr {
 			case EBlock(_):
 				expr;
 			case _:
@@ -153,7 +186,7 @@ class Profiler {
 		@param mark The mark which will be printed
 		@param depth The level of indentation which will be printed
 	**/
-	public static function printMark(mark:Mark, depth:Int = 0) {
+	public static function printMark(mark:Mark, depth = 0) {
 		final indent = StringTools.lpad('', '-', depth);
 		trace(indent + 'Mark: ' + mark.name + ', Begin: ' + mark.timestampBegin + ', End: ' + mark.timestampEnd);
 		mark.children.each(mark -> printMark(mark, depth + 1));
@@ -200,9 +233,11 @@ class Profiler {
 
 	/**
 		Dumps the recorded profile to a dynamic object
+
+		@return The dumped recorded profile as a dynamic object
 	**/
 	public static function dumpToObject():Dynamic {
-		var traceEvents:Array<TraceEvent> = [];
+		final traceEvents:Array<TraceEvent> = [];
 		_markRecord.each(mark -> dumpMark(mark, traceEvents));
 		return {
 			traceEvents: traceEvents,
@@ -212,6 +247,17 @@ class Profiler {
 
 	/**
 		Dumps the recorded profile to a json string
+
+		@return The dumped recorded profile as a json string
+
+		@example
+		```haxe
+		Profiler.profileBlockStart("block2");
+		// Work you want profile
+		Profiler.profileBlockEnd();
+
+		trace(Profiler.dumpToJson());
+		```
 	**/
 	public static function dumpToJson():String {
 		return Json.stringify(dumpToObject());
@@ -221,13 +267,22 @@ class Profiler {
 		Dumps the recorded profile to a json file
 
 		@param filename The filename for the profile, including json extension
+
+		@example
+		```haxe
+		Profiler.profileBlockStart("block2");
+		// Work you want profile
+		Profiler.profileBlockEnd();
+
+		Profiler.dumpToJsonFile("profile_dump.json");
+		```
 	**/
 	public static function dumpToJsonFile(filename:String) {
-		var jsonString = dumpToJson();
+		final jsonString = dumpToJson();
 		#if js
-		var blob = new Blob([jsonString], {type: 'application/json'});
-		var url = URL.createObjectURL(blob);
-		var link:AnchorElement = cast Browser.document.createAnchorElement();
+		final blob = new Blob([jsonString], {type: 'application/json'});
+		final url = URL.createObjectURL(blob);
+		final link:AnchorElement = cast Browser.document.createAnchorElement();
 		link.href = url;
 		link.download = filename;
 		Browser.document.body.appendChild(link);
@@ -244,11 +299,22 @@ class Profiler {
 		Injects the profiler macro into a class, is required for the @:profile macro
 
 		@return Modified class fields
+
+		@example
+		```haxe
+		@:build(hacksaw.profiler.Profiler.injectProfiler())
+		class Foo {
+			@:profile
+			public function bar() {
+				// Work you want to profile
+			}
+		}
+		```
 	**/
 	macro public static function injectProfiler():Array<Field> {
-		var pos = Context.currentPos();
-		var fields = Context.getBuildFields();
-		var localClass = Context.getLocalClass();
+		final pos = Context.currentPos();
+		final fields = Context.getBuildFields();
+		final localClass = Context.getLocalClass();
 		if (localClass == null) {
 			return fields;
 		}
